@@ -1,32 +1,27 @@
 # Desafio Técnico — Transferência Bancária Simplificada
 
-## Objetivo
-
-Criar uma **API RESTful em Java com Spring Boot** que simule uma **plataforma de transferências bancárias simplificada**, onde usuários podem realizar e receber transferências de valores entre si, respeitando regras de negócio e validações.
-
+API RESTful em Java 17 + Spring Boot 3 que simula uma plataforma de transferências entre usuários, respeitando regras de negócio, validações, integração com autorizador externo e notificação. Toda a transferência roda dentro de transação — qualquer falha gera rollback.
 ---
 
-## Contexto do Sistema
+## Arquitetura & Tecnologias
 
-O sistema deve permitir **cadastro de usuários e lojistas**, ambos possuindo uma **carteira com saldo**.  
-As transferências são realizadas **entre usuários** ou **de usuários para lojistas**.
-
-Existem **duas categorias** de usuários:
-- **Comum** → pode **enviar e receber** transferências.  
-- **Lojista** → pode **apenas receber** transferências.
+- Spring Boot 3, Spring Web, Spring Data JPA (Hibernate), Bean Validation
+- H2 (memória por padrão)
+- DTOs para requests/responses
+- @Transactional na transferência + ControllerAdvice para mapear erros (400/422/502/500)
 
 ---
 
 ## Regras de Negócio
 
 1. **Cadastro de Usuários**
-   - Cada usuário deve possuir:
+   - Cada usuário possui:
      - `nomeCompleto`
      - `cpfOuCnpj`
      - `email`
      - `senha`
      - `tipoUsuario` → `COMUM` ou `LOJISTA`
-   - O `cpfOuCnpj` e o `email` devem ser **únicos**.
+   - O `cpfOuCnpj` e o `email` **únicos**.
    - Todos os campos são **obrigatórios**.
 
 2. **Transferências**
@@ -43,7 +38,7 @@ Existem **duas categorias** de usuários:
      ```
    - O **usuário comum** pode enviar transferências.  
    - O **lojista não pode enviar** transferências.  
-   - Deve-se validar se o **pagador possui saldo suficiente**.
+   - Saldo suficiente **obrigatório**.
    - Antes de concluir a transferência, consultar um **serviço externo autorizador**:  
      ```
      GET https://util.devi.tools/api/v2/authorize
@@ -53,11 +48,11 @@ Existem **duas categorias** de usuários:
      ```
      POST https://util.devi.tools/api/v1/notify
      ```
-   - Caso alguma etapa falhe (erro de autorização, notificação ou saldo insuficiente), a transação deve ser **revertida (rollback)**.
+   - Falhou qualquer etapa → rollback (nenhuma linha é persistida).
 
 ---
 
-## Tecnologias Sugeridas
+## Como rodar
 
 - **Java 17+**
 - **Spring Boot 3+**
@@ -71,54 +66,91 @@ Existem **duas categorias** de usuários:
 
 ## Passos Recomendados para Implementação
 
-1. **Crie o projeto**
-   - Gere um novo projeto com o [Spring Initializr](https://start.spring.io/)
-   - Dependências sugeridas:
-     - Spring Web  
-     - Spring Data JPA  
-     - Validation  
-     - H2 Database (ou PostgreSQL)
+Pré-requisitos: JDK 17, Maven (ou wrapper), porta 8080 livre.
 
-2. **Modele as entidades principais**
-   - `Usuario` (atributos como nome, cpfOuCnpj, email, senha, tipoUsuario, saldo)
-   - `Transferencia` (valor, pagador, recebedor, data, status)
+```
+mvn clean package -DskipTests
 
-3. **Implemente os repositórios (repositories)**  
-   - `UsuarioRepository`
-   - `TransferenciaRepository`
-
-4. **Crie os serviços (services)**  
-   - `UsuarioService`
-   - `TransferenciaService`
-     - Valide saldo e tipo de usuário  
-     - Consulte o serviço autorizador  
-     - Execute a transferência dentro de uma transação (`@Transactional`)  
-     - Chame o mock de notificação  
-
-5. **Crie os controladores (controllers)**  
-   - `UsuarioController` → CRUD básico  
-   - `TransferenciaController` → endpoint `/transferencias`  
-
-6. **Teste o fluxo principal**
-   - Crie dois usuários (um comum e um lojista)
-   - Realize uma transferência válida
-   - Teste os casos de falha (saldo insuficiente, lojista como pagador, serviço negando autorização)
+mvn spring-boot:run
+```
 
 ---
 
-## Dica
+## Endpoints
 
-Não se preocupe em fazer tudo perfeito — o foco é ver como você **estrutura o raciocínio**, **organiza o projeto** e **implementa as regras de negócio**.  
-Durante a avaliação, será discutido o que você fez, o que deixou de fazer e o que poderia melhorar.
+### Usuários
+
+- POST /usuarios — cria usuário
+
+- GET /usuarios — lista
+
+- GET /usuarios/{id} — consulta por id
+
+### Request (POST /usuarios) - Se tipo for *COMUM*
+```
+{
+  "nomeCompleto": "Pagador",
+  "cpfOuCnpj": "111123",
+  "email": "pagador@x.com",
+  "senha": "123",
+  "tipoUsuario": "COMUM",
+  "saldoInicial": 200.00
+}
+```
+
+### Request (POST /usuarios) - Se tipo for *LOJISTA*
+```
+{
+  "nomeCompleto": "Pagador",
+  "cpfOuCnpj": "122223",
+  "email": "pagador@x.com",
+  "senha": "123",
+  "tipoUsuario": "LOJISTA",
+  "saldoInicial": 0
+}
+```
+
+### Transferências
+
+- POST /transferencias — executa transferência
+
+- GET /transferencias — lista transferências (DTO, sem N+1)
+
+### Request (POST /transferencias)
+
+```
+{
+  "valor": 100.00,
+  "pagadorId": 1,
+  "recebedorId": 2
+}
+```
 
 ---
 
-## Extras (opcional)
+## Cenários de teste (inclui rollback)
 
-Se quiser ir além:
-- Adicione **testes unitários** com JUnit e Mockito  
-- Implemente **tratamento global de exceções** com `@ControllerAdvice`  
-- Documente a API com **Swagger / OpenAPI**  (Seria melhor para testes e documentação)
+- Crie dois usuários (um comum e um lojista)
+
+- Realize uma transferência válida
+  
+- Teste os casos de falha (saldo insuficiente, lojista como pagador, serviço negando autorização)
+
+---
+
+## Tratamento de erros
+
+- 400 — validação do corpo (campos obrigatórios/formatos)
+
+- 404 — recurso não encontrado (quando aplicável)
+
+- 409 — violação de unicidade (cpfOuCnpj/email)
+
+- 422 — regras de negócio (ex.: lojista como pagador, saldo insuficiente)
+
+- 502 — serviços externos (autorizador/notify) falharam/negados
+
+- 500 — erro interno não mapeado
 
 ---
 
