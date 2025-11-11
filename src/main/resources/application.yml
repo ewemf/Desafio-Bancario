@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:bankdb;DB_CLOSE_DELAY=-1;
+    driverClassName: org.h2.Driver
+    username: root
+    password: root
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  h2:
+    console:
+      enabled: true
+
+
+app:
+  external:
+    auth-url: ${AUTH_URL:https://util.devi.tools/api/v2/authorize}
+    notify-url: ${NOTIFY_URL:https://util.devi.tools/api/v1/notify}
+  http-timeout-ms: ${HTTP_TIMEOUT_MS:5000}
+
+
+server:
+  port: 8080
